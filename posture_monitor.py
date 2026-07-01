@@ -34,8 +34,11 @@ WARNING_DELAY = 10
 BAD_DELAY = 15 
 ALERT_DELAY = 15
 
+work_start_time = time.time()
+break_time = False
+WORK_DURATION = 2 * 60
 
-token  = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0aGFuaG5ndXllbnNvbmpxa0BnbWFpbC5jb20iLCJyb2xlIjoiVVNFUiIsImlhdCI6MTc4Mjc5NjczMywiZXhwIjoxNzgyNzk3NjMzfQ.A3PyOeA-i-EF5cFMvxO9fnZtn4CfYga3Azb27KRzwHQ"
+token  = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0aGFuaG5ndXllbnNvbmpxa0BnbWFpbC5jb20iLCJyb2xlIjoiVVNFUiIsImlhdCI6MTc4Mjg5NjA5MSwiZXhwIjoxNzgyODk2OTkxfQ.MzL9VhxhhHkJ7lqL0LjkMylaz1598R7d3lo_ncTkurY"
 SESSION_ID = 4
     
 
@@ -147,21 +150,21 @@ def send_snapshot(token,session_id,shouder_r,torso_a,neck_a,status):
     except Exception as e:
         logg.error(f"Failed to send snapshot: {e}")
 
-def send_message(token,status):
+def send_message(token,status,flag):
     try:
         http_res = requests.post("http://localhost:8080/api/mqtt/alert",
-                            headers={
+                            headers = {
                                 "Content-Type": "application/json",
                                 "Authorization": f"Bearer {token}"
                             },
-                            json={
-                                "status":status,
+                            json = {
+                                "status": status,
+                                "playVoice": flag
                             }      
                         )
-        print(f"Message sent [{status}]: {http_res.status_code}")
+        print(f"Alert sent [{status}]: {http_res.status_code}")
     except Exception as e:
         logg.error(f"Failed to send message: {e}")
-
 
 
 def send_alert(token,session_id,status):
@@ -189,7 +192,7 @@ while True:
     level = None
     shouder_ang,torso_ang,neck_ang= None,None,None
 
-    if ret_front:
+    if ret_front: 
         frame_front = cv2.flip(frame_front,1)
         front_rgb = cv2.cvtColor(frame_front,cv2.COLOR_BGR2RGB)    
         res_front = pose_front.process(front_rgb) #Đưa ảnh vào cho AI phân tích
@@ -358,25 +361,35 @@ while True:
         2)
 
     current_status = (level, final_text)
+    flag = False
+
     #############Xử lý gửi thông báo#############
+    prev_level = last_sent_status[0] if last_sent_status else None
+
     if  level == "GOOD_POSTURE":
-            status_start_time = None  # Reset bộ đếm trì hoãn khi tư thế tốt
+        status_start_time = None  # Reset bộ đếm trì hoãn khi tư thế tốt
             
-            if current_status != last_sent_status:
-                send_snapshot(token, SESSION_ID, shouder_ang, torso_ang, neck_ang, level)
-                send_message(token, level)
-                last_sent_status = current_status
-                
-            # Reset trạng thái cảnh báo nguy hiểm liên tục 30s
-            bad_start_time = None
-            alert_sent = False
+        if current_status != last_sent_status:
+            send_snapshot(token, SESSION_ID, shouder_ang, torso_ang, neck_ang, level)
+            send_message(token,level,flag)
+            last_sent_status = current_status
+
+        if prev_level in ["WARNING_POSTURE", "BAD_POSTURE"]: 
+            flag = True 
+            send_message(token,level,flag)
+        last_sent_status = current_status
+        # Reset trạng thái cảnh báo nguy hiểm liên tục 30s
+        bad_start_time = None
+        alert_sent = False
+        flag = False
 
 
     else: # WARNING_POSTURE hoặc BAD_POSTURE
+        flag = True
         if current_status != current_detected_status:
-
             current_detected_status = current_status
             status_start_time = time.time()
+
         if status_start_time is None:
             status_start_time = time.time()
        
@@ -386,10 +399,23 @@ while True:
         if posture_duration >= delay:
             if current_status != last_sent_status:
                 send_snapshot(token, SESSION_ID, shouder_ang, torso_ang, neck_ang, level)
-                send_message(token, level)
-
+                send_message(token, level,flag)
+                
                 last_sent_status = current_status
+        flag = False
 
+    # Nhắc nghỉ sau 20 phút
+    if level != "NO_PERSON":
+        flag = True
+        work = time.time() - work_start_time
+        if work >= WORK_DURATION and not break_time:
+            print("BREAK TIME")
+            send_message(token,"BREAK_TIME",flag)
+            break_time = False
+
+            work_start_time = time.time()
+            break_time = False
+        flag = False
 
 
     if ret_front: cv2.imshow("Front Cam - Shoulder", frame_front)
