@@ -36,10 +36,10 @@ ALERT_DELAY = 15
 
 work_start_time = time.time()
 break_time = False
-WORK_DURATION = 2 * 60
+WORK_DURATION = 3 * 60
 
-token  = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0aGFuaG5ndXllbnNvbmpxa0BnbWFpbC5jb20iLCJyb2xlIjoiVVNFUiIsImlhdCI6MTc4Mjg5NjA5MSwiZXhwIjoxNzgyODk2OTkxfQ.MzL9VhxhhHkJ7lqL0LjkMylaz1598R7d3lo_ncTkurY"
-SESSION_ID = 4
+token  = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0aGFuaG5ndXllbnNvbmpxa0BnbWFpbC5jb20iLCJyb2xlIjoiVVNFUiIsImlhdCI6MTc4MzE0MjcwNiwiZXhwIjoxNzgzMTQzNjA2fQ.m16P0ManvL5wF9jjbhO333mHnKxpvVRTRm5EiaH2QOE"
+SESSION_ID = 1
     
 
 
@@ -214,9 +214,9 @@ while True:
 
 
     if shouder_ang is not None:
-        if shouder_ang < 8:
+        if shouder_ang < 10:
             shoulder_state = "STRAIGHT"
-        elif shouder_ang < 14:
+        elif shouder_ang < 16:
             shoulder_state = "WARNING"
         else:
             shoulder_state = "BAD"
@@ -234,9 +234,9 @@ while True:
 
         # Nếu đang ngồi dựa lưng thì mới ngưỡng cổ
         if torso_ang is not None and torso_ang < -10:
-            if neck_ang <= 30:
+            if neck_ang <= 34:
                 neck_state = "STRAIGHT"
-            elif neck_ang <= 38:
+            elif neck_ang <= 39:
                 neck_state = "WARNING"
             else:
                 neck_state = "BAD"
@@ -245,7 +245,7 @@ while True:
         else:
             if neck_ang <= 20:
                 neck_state = "STRAIGHT"
-            elif neck_ang <= 35:
+            elif neck_ang <= 33:
                 neck_state = "WARNING"
             else:
                 neck_state = "BAD"
@@ -409,7 +409,6 @@ while True:
         flag = True
         work = time.time() - work_start_time
         if work >= WORK_DURATION and not break_time:
-            print("BREAK TIME")
             send_message(token,"BREAK_TIME",flag)
             break_time = False
 
@@ -418,9 +417,11 @@ while True:
         flag = False
 
 
-    if ret_front: cv2.imshow("Front Cam - Shoulder", frame_front)
-    if ret_side: cv2.imshow("Side Cam - Torso & Neck", frame_side)
+    # if ret_front: cv2.imshow("Front Cam - Shoulder", frame_front)
+    # if ret_side: cv2.imshow("Side Cam - Torso & Neck", frame_side)
 
+    concat = cv2.hconcat([frame_front,frame_side])
+    cv2.imshow("Result",concat)
 
 
     if cv2.waitKey(1) == ord('q'):
