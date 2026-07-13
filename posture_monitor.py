@@ -13,7 +13,7 @@ side_cam = cv2.VideoCapture(1)
 mpPose = mp.solutions.pose #lấy module Pose từ MediaPipe
 pose_front = mpPose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
 pose_side = mpPose.Pose(min_detection_confidence=0.5, min_tracking_confidence=0.5)
-mpDraw = mp.solutions.drawing_utils #Khởi tạo lớp vẽ của Mediapipe
+mpDraw = mp.solutions.drawing_utils 
 
 last_alert = 0
 alert_sent = False
@@ -26,23 +26,25 @@ neck_history = deque(maxlen = 15)
 upper_history = deque(maxlen=15)
 
 last_sent_status = None
-status_start_time = None # Timer cho STATUS_DELAY (gửi snapshot)
-bad_start_time = None # Timer riêng cho ALERT_DELAY (beep/alert)
+status_start_time = None 
+bad_start_time = None 
 current_detected_status = None
 STATUS_DELAY = 5
-WARNING_DELAY = 10
-BAD_DELAY = 15 
+WARNING_DELAY = 5
+BAD_DELAY = 5
 ALERT_DELAY = 15
 
 work_start_time = time.time()
 break_time = False
 WORK_DURATION = 3 * 60
 
-token  = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0aGFuaG5ndXllbnNvbmpxa0BnbWFpbC5jb20iLCJyb2xlIjoiVVNFUiIsImlhdCI6MTc4MzE0MjcwNiwiZXhwIjoxNzgzMTQzNjA2fQ.m16P0ManvL5wF9jjbhO333mHnKxpvVRTRm5EiaH2QOE"
-SESSION_ID = 1
-    
 
 
+
+#Lay duoc token tu AI Local la vi day la 1 URL public tren internet
+config = requests.get("https://deloyonrailway-production.up.railway.app/api/ai/config").json()
+token = config["data"]["token"]
+SESSION_ID = config["data"]["sessionId"]
 
 def make_lm_timestaps(res): #Chứa toạ độ các điểm trên khung xương
     lm_list = []
@@ -130,16 +132,16 @@ def neck_angle(res):
 
     return sum(neck_history) / len(neck_history)
     
-def send_snapshot(token,session_id,shouder_r,torso_a,neck_a,status):
+def send_snapshot(token,shouder_r,torso_a,neck_a,status):
     try:
-        http_res = requests.post("http://localhost:8080/api/posture-snapshots/create",
+        http_res =  requests.post("https://deloyonrailway-production.up.railway.app/api/posture-snapshots/create",
                             headers={
                                 "Content-Type": "application/json",
                                 "Authorization": f"Bearer {token}"
                             },
                             
                             json={
-                                "sessionId": session_id,
+                                "sessionId": SESSION_ID,
                                 "shoulderRatio": shouder_r,
                                 "torsoAngle": torso_a,
                                 "neckAngle": neck_a,
@@ -152,7 +154,7 @@ def send_snapshot(token,session_id,shouder_r,torso_a,neck_a,status):
 
 def send_message(token,status,flag):
     try:
-        http_res = requests.post("http://localhost:8080/api/mqtt/alert",
+        http_res = requests.post("https://deloyonrailway-production.up.railway.app/api/mqtt/alert",
                             headers = {
                                 "Content-Type": "application/json",
                                 "Authorization": f"Bearer {token}"
@@ -167,15 +169,15 @@ def send_message(token,status,flag):
         logg.error(f"Failed to send message: {e}")
 
 
-def send_alert(token,session_id,status):
+def send_alert(token,status):
     try:
-        http_res = requests.post("http://localhost:8080/api/alert/create",
+        http_res = requests.post("https://deloyonrailway-production.up.railway.app/api/alert/create",
                                 headers={
                                     "Content-Type": "application/json",
                                     "Authorization": f"Bearer {token}"
                                 },
                                 json={
-                                    "sessionId": session_id,
+                                    "sessionId": SESSION_ID,
                                     "postureStatus": status,
                                     "message": "Bạn ngồi sai tư thế liên tục quá 30s"
                                 }
@@ -214,9 +216,9 @@ while True:
 
 
     if shouder_ang is not None:
-        if shouder_ang < 10:
+        if shouder_ang < 6:
             shoulder_state = "STRAIGHT"
-        elif shouder_ang < 16:
+        elif shouder_ang < 10:
             shoulder_state = "WARNING"
         else:
             shoulder_state = "BAD"
@@ -225,27 +227,28 @@ while True:
     if torso_ang is not None:
         if torso_ang <= 10:
             torso_state = "STRAIGHT"
-        elif torso_ang <= 20:
+        elif torso_ang <= 18:
             torso_state = "WARNING"
         else:
             torso_state = "BAD"
+
 
     if neck_ang is not None:
 
         # Nếu đang ngồi dựa lưng thì mới ngưỡng cổ
         if torso_ang is not None and torso_ang < -10:
-            if neck_ang <= 34:
+            if neck_ang <= 37:
                 neck_state = "STRAIGHT"
-            elif neck_ang <= 39:
+            elif neck_ang <= 42:
                 neck_state = "WARNING"
             else:
                 neck_state = "BAD"
 
         # Ngồi bình thường
         else:
-            if neck_ang <= 20:
+            if neck_ang <= 22:
                 neck_state = "STRAIGHT"
-            elif neck_ang <= 33:
+            elif neck_ang <= 25:
                 neck_state = "WARNING"
             else:
                 neck_state = "BAD"
@@ -370,7 +373,7 @@ while True:
         status_start_time = None  # Reset bộ đếm trì hoãn khi tư thế tốt
             
         if current_status != last_sent_status:
-            send_snapshot(token, SESSION_ID, shouder_ang, torso_ang, neck_ang, level)
+            send_snapshot(token, shouder_ang, torso_ang, neck_ang, level)
             send_message(token,level,flag)
             last_sent_status = current_status
 
@@ -384,7 +387,7 @@ while True:
         flag = False
 
 
-    else: # WARNING_POSTURE hoặc BAD_POSTURE
+    elif level == "WARNING_POSTURE" or level == "BAD_POSTURE": # WARNING_POSTURE hoặc BAD_POSTURE
         flag = True
         if current_status != current_detected_status:
             current_detected_status = current_status
@@ -398,7 +401,7 @@ while True:
 
         if posture_duration >= delay:
             if current_status != last_sent_status:
-                send_snapshot(token, SESSION_ID, shouder_ang, torso_ang, neck_ang, level)
+                send_snapshot(token, shouder_ang, torso_ang, neck_ang, level)
                 send_message(token, level,flag)
                 
                 last_sent_status = current_status
@@ -417,13 +420,13 @@ while True:
         flag = False
 
 
-    # if ret_front: cv2.imshow("Front Cam - Shoulder", frame_front)
-    # if ret_side: cv2.imshow("Side Cam - Torso & Neck", frame_side)
+    if ret_front and ret_side:
+        concat = cv2.hconcat([frame_front, frame_side])
+        cv2.imshow("Result", concat)
+    elif ret_front:
+        cv2.imshow("Result", frame_front)
 
-    concat = cv2.hconcat([frame_front,frame_side])
-    cv2.imshow("Result",concat)
-
-
+    cv2.waitKey(1)
     if cv2.waitKey(1) == ord('q'):
         break
 
